@@ -955,7 +955,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '3.10.561',
+    apiVersion: '3.10.559',
     data,
     password,
     disableAutoFetch,
@@ -2738,8 +2738,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = exports.version = '3.10.561';
-const build = exports.build = '2a871fbd7';
+const version = exports.version = '3.10.559';
+const build = exports.build = '93a1b4fc9';
 
 /***/ }),
 /* 3 */
@@ -3496,7 +3496,7 @@ class AnnotationEditor {
     this.fixAndSetPosition();
     this.moveInDOM();
   }
-  getRect(tx, ty) {
+  getRect(tx, ty, isRound = false) {
     const scale = this.parentScale;
     const [pageWidth, pageHeight] = this.pageDimensions;
     const [pageX, pageY] = this.pageTranslation;
@@ -3506,18 +3506,36 @@ class AnnotationEditor {
     const y = this.y * pageHeight;
     const width = this.width * pageWidth;
     const height = this.height * pageHeight;
+    let x1, x2, y1, y2;
     switch (this.rotation) {
       case 0:
-        return [x + shiftX + pageX, pageHeight - y - shiftY - height + pageY, x + shiftX + width + pageX, pageHeight - y - shiftY + pageY];
+        x1 = x + shiftX + pageX;
+        y1 = pageHeight - y - shiftY - height + pageY;
+        x2 = x + shiftX + width + pageX;
+        y2 = pageHeight - y - shiftY + pageY;
+        break;
       case 90:
-        return [x + shiftY + pageX, pageHeight - y + shiftX + pageY, x + shiftY + height + pageX, pageHeight - y + shiftX + width + pageY];
+        x1 = x + shiftY + pageX;
+        y1 = pageHeight - y + shiftX + pageY;
+        x2 = x + shiftY + height + pageX;
+        y2 = pageHeight - y + shiftX + width + pageY;
+        break;
       case 180:
-        return [x - shiftX - width + pageX, pageHeight - y + shiftY + pageY, x - shiftX + pageX, pageHeight - y + shiftY + height + pageY];
+        x1 = x - shiftX - width + pageX;
+        y1 = pageHeight - y + shiftY + pageY;
+        x2 = x - shiftX + pageX;
+        y2 = pageHeight - y + shiftY + height + pageY;
+        break;
       case 270:
-        return [x - shiftY - height + pageX, pageHeight - y - shiftX - width + pageY, x - shiftY + pageX, pageHeight - y - shiftX + pageY];
+        x1 = x - shiftY - height + pageX;
+        y1 = pageHeight - y - shiftX - width + pageY;
+        x2 = x - shiftY + pageX;
+        y2 = pageHeight - y - shiftX + pageY;
+        break;
       default:
         throw new Error("Invalid rotation");
     }
+    return isRound ? [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)] : [x1, y1, x2, y2];
   }
   getRectInCurrentCoords(rect, pageHeight) {
     const [x1, y1, x2, y2] = rect;
@@ -17714,9 +17732,9 @@ class StampEditor extends _editor.AnnotationEditor {
     } = this.#bitmap;
     if (this.signatureIdentification) {
       const expectedWidth = this.signatureIdentification["expectWidth"];
-      const expectedHeight = this.signatureIdentification["expectWidth"];
+      const expectedHeight = this.signatureIdentification["expectHeight"];
       if (expectedWidth !== -1) width = expectedWidth;
-      if (expectedHeight !== -1) height = expectedWidth;
+      if (expectedHeight !== -1) height = expectedHeight;
     }
     const [pageWidth, pageHeight] = this.pageDimensions;
     const MAX_RATIO = 0.75;
@@ -17858,20 +17876,24 @@ class StampEditor extends _editor.AnnotationEditor {
     editor.height = (rect[3] - rect[1]) / parentHeight;
     return editor;
   }
-  serialize(isForCopying = false, context = null) {
+  serialize(isForCopying = false, context = null, isRound = false) {
     if (this.isEmpty()) {
       return null;
     }
-    const serialized = {
+    let serialized = {
       annotationType: _util.AnnotationEditorType.STAMP,
       bitmapId: this.#bitmapId,
       imgBitmap: this._uiManager.imageManager.getImageBitmapCacheById(this.#bitmapId),
       pageIndex: this.pageIndex,
-      rect: this.getRect(0, 0),
+      rect: this.getRect(0, 0, isRound),
       rotation: this.rotation,
       isSvg: this.#isSvg,
+      width: -1,
+      height: -1,
       signatureIdentification: this.signatureIdentification
     };
+    serialized.width = serialized.rect[2] - serialized.rect[0];
+    serialized.height = serialized.rect[3] - serialized.rect[1];
     if (isForCopying) {
       serialized.bitmapUrl = this.#serializeBitmap(true);
       return serialized;
@@ -18198,8 +18220,8 @@ var _tools = __w_pdfjs_require__(5);
 var _annotation_layer = __w_pdfjs_require__(29);
 var _worker_options = __w_pdfjs_require__(14);
 var _xfa_layer = __w_pdfjs_require__(32);
-const pdfjsVersion = '3.10.561';
-const pdfjsBuild = '2a871fbd7';
+const pdfjsVersion = '3.10.559';
+const pdfjsBuild = '93a1b4fc9';
 })();
 
 /******/ 	return __webpack_exports__;

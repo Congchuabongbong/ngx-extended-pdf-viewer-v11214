@@ -65,6 +65,7 @@ import { PdfSidebarView } from './options/pdf-sidebar-views';
 import { SpreadType } from './options/spread-type';
 import { ResponsiveVisibility } from './responsive-visibility.pipe';
 
+
 declare const ServiceWorkerOptions: ServiceWorkerOptionsType; // defined in viewer.js
 declare class ResizeObserver {
   constructor(param: () => void);
@@ -1116,15 +1117,42 @@ export class NgxExtendedPdfViewerComponent implements OnInit, AfterViewInit, OnC
   }
 
   ngAfterViewInit() {
+    this._bindEventInsertion()
+    this._doInitPdfViewerWhenReady()
+  }
+
+
+  private _bindEventInsertion() {
+    this.elementRef.nativeElement.addEventListener('animationstart', this._bindInsertionListener, false); // standard + firefox
+    this.elementRef.nativeElement.addEventListener('MSAnimationStart', this._bindInsertionListener, false); // IE
+    this.elementRef.nativeElement.addEventListener('webkitAnimationStart', this._bindInsertionListener, false); // Chrome + Safari
+  }
+
+  private _unbindEventInsertion() {
+    this.elementRef.nativeElement.removeEventListener('animationstart', this._bindInsertionListener, false); // standard + firefox
+    this.elementRef.nativeElement.removeEventListener('MSAnimationStart', this._bindInsertionListener, false); // IE
+    this.elementRef.nativeElement.removeEventListener('webkitAnimationStart', this._bindInsertionListener, false); // Chrome + Safari
+  }
+
+  private _isInsertDome = false;
+  private _doInitPdfViewerWhenReady() {
     if (typeof window !== 'undefined') {
       if (!this.shuttingDown) {
         // hurried users sometimes reload the PDF before it has finished initializing
-        if ((globalThis as any).webViewerLoad) {
+        if ((globalThis as any).webViewerLoad && this._isInsertDome) {
           this.ngZone.runOutsideAngular(() => this.doInitPDFViewer());
         } else {
-          setTimeout(() => this.ngAfterViewInit(), 50);
+          setTimeout(() => this._doInitPdfViewerWhenReady(), 50);
         }
       }
+    }
+  }
+
+  private _bindInsertionListener = this._insertionListener.bind(this)
+  private _insertionListener(event) {
+    // Making sure that this is the animation we want.
+    if (event.animationName === "nodeInserted" && event.currentTarget == this.elementRef.nativeElement) {
+      this._isInsertDome = true
     }
   }
 
@@ -1989,74 +2017,77 @@ export class NgxExtendedPdfViewerComponent implements OnInit, AfterViewInit, OnC
     PDFViewerApplication.eventBus.dispatch('switchcursortool', { tool: this.handTool ? 1 : 0 });
   }
 
-  public async ngOnDestroy(): Promise<void> {
+  public ngOnDestroy() {
+    this._unbindEventInsertion()
     if (typeof window === 'undefined') {
       return; // fast escape for server side rendering
     }
+    window['destroyPdfViewer'] = new Promise(async (resolve, reject) => {
+      const PDFViewerApplication: IPDFViewerApplication = (window as any).PDFViewerApplication;
+      PDFViewerApplication?.pdfViewer?.destroyBookMode();
+      PDFViewerApplication?.pdfViewer?.stopRendering();
+      PDFViewerApplication?.pdfThumbnailViewer?.stopRendering();
 
-    const PDFViewerApplication: IPDFViewerApplication = (window as any).PDFViewerApplication;
-    PDFViewerApplication?.pdfViewer?.destroyBookMode();
-    PDFViewerApplication?.pdfViewer?.stopRendering();
-    PDFViewerApplication?.pdfThumbnailViewer?.stopRendering();
-
-    const originalPrint = NgxExtendedPdfViewerComponent.originalPrint;
-    if (window && originalPrint && !originalPrint.toString().includes('printPdf')) {
-      window.print = originalPrint;
-    }
-    const printContainer = document.querySelector('#printContainer');
-    if (printContainer) {
-      printContainer.parentElement?.removeChild(printContainer);
-    }
-
-    (window as any).getFormValueFromAngular = undefined;
-    (window as any).registerAcroformAnnotations = undefined;
-    this.shuttingDown = true;
-
-    this.service.ngxExtendedPdfViewerInitialized = false;
-    if (this.initTimeout) {
-      clearTimeout(this.initTimeout);
-      this.initTimeout = undefined;
-    }
-    if (PDFViewerApplication) {
-      // #802 clear the form data; otherwise the "download" dialogs opens
-      PDFViewerApplication.pdfDocument?.annotationStorage?.resetModified();
-      this.formSupport.reset();
-
-      PDFViewerApplication._cleanup();
-
-      try {
-        await PDFViewerApplication.close();
-      } catch (error) {
-        // just ignore it
-        // for example, the secondary toolbar may have not been initialized yet, so
-        // trying to destroy it result in errors
+      const originalPrint = NgxExtendedPdfViewerComponent.originalPrint;
+      if (window && originalPrint && !originalPrint.toString().includes('printPdf')) {
+        window.print = originalPrint;
       }
-      if (PDFViewerApplication.printKeyDownListener) {
-        removeEventListener('keydown', PDFViewerApplication.printKeyDownListener, true);
+      const printContainer = document.querySelector('#printContainer');
+      if (printContainer) {
+        printContainer.parentElement?.removeChild(printContainer);
       }
-      setTimeout(() => {
-        if (PDFViewerApplication._boundEvents) {
-          PDFViewerApplication.unbindWindowEvents();
+
+      (window as any).getFormValueFromAngular = undefined;
+      (window as any).registerAcroformAnnotations = undefined;
+      this.shuttingDown = true;
+
+      this.service.ngxExtendedPdfViewerInitialized = false;
+      if (this.initTimeout) {
+        clearTimeout(this.initTimeout);
+        this.initTimeout = undefined;
+      }
+      if (PDFViewerApplication) {
+        // #802 clear the form data; otherwise the "download" dialogs opens
+        PDFViewerApplication.pdfDocument?.annotationStorage?.resetModified();
+        this.formSupport.reset();
+
+        PDFViewerApplication._cleanup();
+
+        try {
+          await PDFViewerApplication.close();
+        } catch (error) {
+          // just ignore it
+          // for example, the secondary toolbar may have not been initialized yet, so
+          // trying to destroy it result in errors
         }
-        const bus = PDFViewerApplication.eventBus;
-        if (bus) {
-          PDFViewerApplication.unbindEvents();
-          for (const key in bus._listeners) {
-            if (bus._listeners[key]) {
-              const list = bus._listeners[key];
-              // not sure if the for loop is necessary - but
-              // it might improve garbage collection if the "listeners"
-              // array is stored somewhere else
-              for (let i = 0; i < list.length; i++) {
-                list[i] = undefined;
+        if (PDFViewerApplication.printKeyDownListener) {
+          removeEventListener('keydown', PDFViewerApplication.printKeyDownListener, true);
+        }
+        setTimeout(() => {
+          if (PDFViewerApplication._boundEvents) {
+            PDFViewerApplication.unbindWindowEvents();
+          }
+          const bus = PDFViewerApplication.eventBus;
+          if (bus) {
+            PDFViewerApplication.unbindEvents();
+            for (const key in bus._listeners) {
+              if (bus._listeners[key]) {
+                const list = bus._listeners[key];
+                // not sure if the for loop is necessary - but
+                // it might improve garbage collection if the "listeners"
+                // array is stored somewhere else
+                for (let i = 0; i < list.length; i++) {
+                  list[i] = undefined;
+                }
+                bus._listeners[key] = undefined;
               }
-              bus._listeners[key] = undefined;
             }
           }
-        }
-        (PDFViewerApplication.eventBus as any) = null;
-      });
-    }
+          (PDFViewerApplication.eventBus as any) = null;
+          resolve(undefined)
+        });
+      }
+    })
   }
 
   private isPrimaryMenuVisible(): boolean {
