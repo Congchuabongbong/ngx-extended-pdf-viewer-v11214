@@ -831,6 +831,14 @@ export class NgxExtendedPdfViewerComponent implements OnInit, AfterViewInit, OnC
   @Input()
   public minZoom = 0.1;
 
+  @Input()
+  public get assetsFolder() {
+    return pdfDefaultOptions.assetsFolder;
+  }
+  public set assetsFolder(value) {
+    pdfDefaultOptions.assetsFolder = value
+  }
+
   /** This attribute allows you to increase the size of the UI elements so you can use them on small mobile devices.
    * This attribute is a string with a percent character at the end (e.g. "150%").
    */
@@ -1292,12 +1300,7 @@ export class NgxExtendedPdfViewerComponent implements OnInit, AfterViewInit, OnC
         PDFViewerApplicationOptions.set('enableDragAndDrop', this.enableDragAndDrop);
         let language = this.language === '' ? undefined : this.language;
         if (!language) {
-          if (typeof window === 'undefined') {
-            // server-side rendering
-            language = 'en';
-          } else {
-            language = navigator.language;
-          }
+          language = 'vi'
         }
         PDFViewerApplicationOptions.set('locale', language);
         PDFViewerApplicationOptions.set('imageResourcesPath', this.imageResourcesPath);
